@@ -17,10 +17,11 @@
   "devDependencies": {
     "coveralls": "^2.11.6",
     "expect": "^1.14.0",
-    "mocha": "^2.4.5",
+    "mocha": "^4.0.1",
     "nyc": "^5.6.0"
   },
   "dependencies": {
+    "immutable": "^4.0.0-rc.9",
     "invariant": "^2.2.0"
   },
   "repository": {

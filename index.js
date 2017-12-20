@@ -1,15 +1,16 @@
 var invariant = require('invariant');
+var Immutable = require('immutable');
 
 var hasOwnProperty = Object.prototype.hasOwnProperty;
 var splice = Array.prototype.splice;
 
 var toString = Object.prototype.toString
-var type = function(obj) {
+var type = function (obj) {
   return toString.call(obj).slice(8, -1);
 }
 
 var assign = Object.assign || /* istanbul ignore next */ function assign(target, source) {
-  getAllKeys(source).forEach(function(key) {
+  getAllKeys(source).forEach(function (key) {
     if (hasOwnProperty.call(source, key)) {
       target[key] = source[key];
     }
@@ -18,8 +19,8 @@ var assign = Object.assign || /* istanbul ignore next */ function assign(target,
 };
 
 var getAllKeys = typeof Object.getOwnPropertySymbols === 'function' ?
-  function(obj) { return Object.keys(obj).concat(Object.getOwnPropertySymbols(obj)) } :
-  /* istanbul ignore next */ function(obj) { return Object.keys(obj) };
+  function (obj) { return Object.keys(obj).concat(Object.getOwnPropertySymbols(obj)) } :
+  /* istanbul ignore next */ function (obj) { return Object.keys(obj) };
 
 /* istanbul ignore next */
 function copy(object) {
@@ -39,19 +40,19 @@ function copy(object) {
 
 function newContext() {
   var commands = assign({}, defaultCommands);
-  update.extend = function(directive, fn) {
+  update.extend = function (directive, fn) {
     commands[directive] = fn;
   };
-  update.isEquals = function(a, b) { return a === b; };
+  update.isEquals = function (a, b) { return a === b; };
 
   return update;
 
   function update(object, spec) {
     if (typeof spec === 'function') {
-      return spec(object);
+      return Immutable.fromJS(spec(object));
     }
 
-    if (!(Array.isArray(object) && Array.isArray(spec))) {
+    if (!(object instanceof Immutable.List && Array.isArray(spec))) {
       invariant(
         !Array.isArray(spec),
         'update(): You provided an invalid spec to update(). The spec may ' +
@@ -70,110 +71,87 @@ function newContext() {
 
     var nextObject = object;
     var index, key;
-    getAllKeys(spec).forEach(function(key) {
+    getAllKeys(spec).forEach(function (key) {
       if (hasOwnProperty.call(commands, key)) {
-        var objectWasNextObject = object === nextObject;
         nextObject = commands[key](spec[key], nextObject, spec, object);
-        if (objectWasNextObject && update.isEquals(nextObject, object)) {
-          nextObject = object;
-        }
       } else {
-        var nextValueForKey = update(object[key], spec[key]);
-        if (!update.isEquals(nextValueForKey, nextObject[key]) || typeof nextValueForKey === 'undefined' && !hasOwnProperty.call(object, key)) {
-          if (nextObject === object) {
-            nextObject = copy(object);
-          }
-          nextObject[key] = nextValueForKey;
-        }
+        nextObject = nextObject.set(key, update(object instanceof Immutable.Map || object instanceof Immutable.List ? object.get(key, null) : undefined, spec[key]));
       }
-    })
+    });
     return nextObject;
   }
 
 }
 
 var defaultCommands = {
-  $push: function(value, nextObject, spec) {
+  $push: function (value, nextObject, spec) {
     invariantPushAndUnshift(nextObject, spec, '$push');
     return value.length ? nextObject.concat(value) : nextObject;
   },
-  $unshift: function(value, nextObject, spec) {
+  $unshift: function (value, nextObject, spec) {
     invariantPushAndUnshift(nextObject, spec, '$unshift');
-    return value.length ? value.concat(nextObject) : nextObject;
+    return value.length ? Immutable.fromJS(value).concat(nextObject) : nextObject;
   },
-  $splice: function(value, nextObject, spec, originalObject) {
+  $splice: function (value, nextObject, spec, originalObject) {
     invariantSplices(nextObject, spec);
-    value.forEach(function(args) {
+    return value.reduce((nextObject, args) => {
       invariantSplice(args);
-      if (nextObject === originalObject && args.length) nextObject = copy(originalObject);
-      splice.apply(nextObject, args);
-    });
-    return nextObject;
+      return Immutable.Collection.Indexed.prototype.splice.apply(nextObject, args);
+    }, nextObject);
   },
-  $set: function(value, nextObject, spec) {
+  $set: function (value, nextObject, spec) {
     invariantSet(spec);
-    return value;
+    return Immutable.fromJS(value);
   },
-  $toggle: function(targets, nextObject) {
+  $toggle: function (targets, nextObject) {
     invariantSpecArray(targets, '$toggle');
     var nextObjectCopy = targets.length ? copy(nextObject) : nextObject;
 
-    targets.forEach(function(target) {
+    targets.forEach(function (target) {
       nextObjectCopy[target] = !nextObject[target];
     });
 
     return nextObjectCopy;
   },
-  $unset: function(value, nextObject, spec, originalObject) {
+  $unset: function (value, nextObject, spec, originalObject) {
     invariantSpecArray(value, '$unset');
-    value.forEach(function(key) {
-      if (Object.hasOwnProperty.call(nextObject, key)) {
-        if (nextObject === originalObject) nextObject = copy(originalObject);
-        delete nextObject[key];
-      }
-    });
-    return nextObject;
+    debugger;
+    return nextObject.deleteAll(value);
   },
-  $add: function(value, nextObject, spec, originalObject) {
+  $add: function (value, nextObject, spec, originalObject) {
     invariantMapOrSet(nextObject, '$add');
     invariantSpecArray(value, '$add');
     if (type(nextObject) === 'Map') {
-      value.forEach(function(pair) {
+      value.forEach(function (pair) {
         var key = pair[0];
         var value = pair[1];
         if (nextObject === originalObject && nextObject.get(key) !== value) nextObject = copy(originalObject);
         nextObject.set(key, value);
       });
     } else {
-      value.forEach(function(value) {
+      value.forEach(function (value) {
         if (nextObject === originalObject && !nextObject.has(value)) nextObject = copy(originalObject);
         nextObject.add(value);
       });
     }
     return nextObject;
   },
-  $remove: function(value, nextObject, spec, originalObject) {
+  $remove: function (value, nextObject, spec, originalObject) {
     invariantMapOrSet(nextObject, '$remove');
     invariantSpecArray(value, '$remove');
-    value.forEach(function(key) {
+    value.forEach(function (key) {
       if (nextObject === originalObject && nextObject.has(key)) nextObject = copy(originalObject);
       nextObject.delete(key);
     });
     return nextObject;
   },
-  $merge: function(value, nextObject, spec, originalObject) {
+  $merge: function (value, nextObject, spec, originalObject) {
     invariantMerge(nextObject, value);
-    getAllKeys(value).forEach(function(key) {
-      if (value[key] !== nextObject[key]) {
-        if (nextObject === originalObject) nextObject = copy(originalObject);
-        nextObject[key] = value[key];
-      }
-    });
-    return nextObject;
+    return nextObject.merge(value);
   },
-  $apply: function(value, original) {
+  $apply: function (value, original) {
     invariantApply(value);
-    return value(original);
+    return Immutable.fromJS(value(original));
   }
 };
 
@@ -184,8 +162,8 @@ module.exports.newContext = newContext;
 
 function invariantPushAndUnshift(value, spec, command) {
   invariant(
-    Array.isArray(value),
-    'update(): expected target of %s to be an array; got %s.',
+    value instanceof Immutable.List,
+    'update(): expected target of %s to be an immutable List; got %s.',
     command,
     value
   );
@@ -204,8 +182,8 @@ function invariantSpecArray(spec, command) {
 
 function invariantSplices(value, spec) {
   invariant(
-    Array.isArray(value),
-    'Expected $splice target to be an array; got %s',
+    value instanceof Immutable.List,
+    'Expected $splice target to be an immutable List; got %s',
     value
   );
   invariantSplice(spec['$splice']);
@@ -242,8 +220,8 @@ function invariantMerge(target, specValue) {
     specValue
   );
   invariant(
-    target && typeof target === 'object',
-    'update(): $merge expects a target of type \'object\'; got %s',
+    target && target instanceof Immutable.Map,
+    'update(): $merge expects a target of type \'immutable Map\'; got %s',
     target
   );
 }
