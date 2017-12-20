@@ -105,33 +105,26 @@ var defaultCommands = {
   },
   $toggle: function (targets, nextObject) {
     invariantSpecArray(targets, '$toggle');
-    var nextObjectCopy = targets.length ? copy(nextObject) : nextObject;
-
-    targets.forEach(function (target) {
-      nextObjectCopy[target] = !nextObject[target];
-    });
-
-    return nextObjectCopy;
+    return targets.reduce(function (prev, target) {
+      return prev.set(target, !nextObject.get(target));
+    }, nextObject);
   },
   $unset: function (value, nextObject, spec, originalObject) {
     invariantSpecArray(value, '$unset');
-    debugger;
     return nextObject.deleteAll(value);
   },
   $add: function (value, nextObject, spec, originalObject) {
     invariantMapOrSet(nextObject, '$add');
     invariantSpecArray(value, '$add');
-    if (type(nextObject) === 'Map') {
+    if (nextObject instanceof Immutable.Map) {
       value.forEach(function (pair) {
         var key = pair[0];
         var value = pair[1];
-        if (nextObject === originalObject && nextObject.get(key) !== value) nextObject = copy(originalObject);
-        nextObject.set(key, value);
+        nextObject = nextObject.set(key, value);
       });
     } else {
       value.forEach(function (value) {
-        if (nextObject === originalObject && !nextObject.has(value)) nextObject = copy(originalObject);
-        nextObject.add(value);
+        nextObject = nextObject.add(value);
       });
     }
     return nextObject;
@@ -139,11 +132,9 @@ var defaultCommands = {
   $remove: function (value, nextObject, spec, originalObject) {
     invariantMapOrSet(nextObject, '$remove');
     invariantSpecArray(value, '$remove');
-    value.forEach(function (key) {
-      if (nextObject === originalObject && nextObject.has(key)) nextObject = copy(originalObject);
-      nextObject.delete(key);
-    });
-    return nextObject;
+    return nextObject instanceof Immutable.Map
+      ? nextObject.removeAll(value)
+      : value.reduce((prev, key) => prev.remove(key), nextObject);
   },
   $merge: function (value, nextObject, spec, originalObject) {
     invariantMerge(nextObject, value);
@@ -227,11 +218,10 @@ function invariantMerge(target, specValue) {
 }
 
 function invariantMapOrSet(target, command) {
-  var typeOfTarget = type(target);
   invariant(
-    typeOfTarget === 'Map' || typeOfTarget === 'Set',
+    target instanceof Immutable.Map || target instanceof Immutable.Set,
     'update(): %s expects a target of type Set or Map; got %s',
     command,
-    typeOfTarget
+    target.constructor.name
   );
 }

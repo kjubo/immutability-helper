@@ -155,7 +155,7 @@ describe('update', function () {
       );
     });
     it('toggles false to true and true to false', function () {
-      expect(update({ a: false, b: true }, { $toggle: ['a', 'b'] })).toEqual({ a: true, b: false });
+      expect(update(fromJS({ a: false, b: true }), { $toggle: ['a', 'b'] })).toEqual(fromJS({ a: true, b: false }));
     });
     it('does not mutate the original object', function () {
       var obj = fromJS({ a: false });
@@ -163,7 +163,7 @@ describe('update', function () {
       expect(obj).toEqual(fromJS({ a: false }));
     });
     it('keeps reference equality when possible', function () {
-      var original = { a: false };
+      var original = fromJS({ a: false });
       expect(update(original, { $toggle: [] })).toBe(original);
       expect(update(original, { $toggle: ['a'] })).toNotBe(original);
     });
@@ -194,13 +194,13 @@ describe('update', function () {
 
   describe('$add', function () {
     it('works on Map', function () {
-      var state = new Map([[1, 2], [3, 4]]);
+      var state = new Immutable.Map([[1, 2], [3, 4]]);
       var state2 = update(state, { $add: [[5, 6]] });
       expect(state2.get(1)).toEqual(2);
       expect(state2.get(5)).toEqual(6);
     });
     it('works on Set', function () {
-      var state = new Set([1, 2, 3, 4]);
+      var state = new Immutable.Set([1, 2, 3, 4]);
       var state2 = update(state, { $add: [5, 6] });
       expect(state2.has(1)).toBe(true);
       expect(state2.has(5)).toBe(true);
@@ -214,7 +214,7 @@ describe('update', function () {
 
   describe('$remove', function () {
     it('works on Map', function () {
-      var state = new Map([[1, 2], [3, 4], [5, 6]]);
+      var state = new Immutable.Map([[1, 2], [3, 4], [5, 6]]);
       var state2 = update(state, { $remove: [1, 5] });
       expect(state2.has(1)).toBe(false);
       expect(state2.has(3)).toBe(true);
@@ -222,7 +222,7 @@ describe('update', function () {
       expect(state2.has(6)).toBe(false);
     });
     it('works on Set', function () {
-      var state = new Set([1, 2, 3, 4]);
+      var state = new Immutable.Set([1, 2, 3, 4]);
       var state2 = update(state, { $remove: [2, 3] });
       expect(state2.has(1)).toBe(true);
       expect(state2.has(2)).toBe(false);
